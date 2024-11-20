@@ -103,6 +103,7 @@ inline bool isValidEntry( const QString & path )
 
 inline QString getAbsolutePath( const QString & path )
 {
+	// works even if the path is already absolute, also gets rid of any redundant "/./" or "/../" in the middle
 	return QFileInfo( path ).absoluteFilePath();
 }
 
@@ -118,6 +119,7 @@ inline QString getPathFromFileName( const QString & dirPath, const QString & fil
 
 inline QString getAbsolutePathFromFileName( const QString & dirPath, const QString & fileName )
 {
+	// gets rid of any redundant "/./" or "/../" in the middle of dirPath
 	return QDir( dirPath ).absoluteFilePath( fileName );
 }
 
@@ -244,10 +246,15 @@ class PathConvertor {
 
 	QString getAbsolutePath( const QString & path ) const
 	{
-		return path.isEmpty() ? QString() : QFileInfo( _workingDir, path ).absoluteFilePath();
+		// _workingDir.absoluteFilePath( fileName ) only appends path to the absolute path of _workingDir,
+		// QDir::cleanPath() gets rid of any redundant "/./" or "/../" in the middle.
+		// Works even if path is already absolute.
+		return path.isEmpty() ? QString() : QDir::cleanPath( _workingDir.absoluteFilePath( path ) );
 	}
 	QString getRelativePath( const QString & path ) const
 	{
+		// Gets rid of any redundant "/./" or "/../" in the middle.
+		// Works even if path is already relative.
 		return path.isEmpty() ? QString() : _workingDir.relativeFilePath( path );
 	}
 	QString convertPath( const QString & path ) const
