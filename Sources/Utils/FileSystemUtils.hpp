@@ -106,6 +106,11 @@ inline QString getAbsolutePath( const QString & path )
 	return QFileInfo( path ).absoluteFilePath();
 }
 
+inline QString getNormalizedPath( const QString & path )
+{
+	return QFileInfo( path ).canonicalFilePath();
+}
+
 inline QString getPathFromFileName( const QString & dirPath, const QString & fileName )
 {
 	return !dirPath.isEmpty() ? QDir( dirPath ).filePath( fileName ) : fileName;

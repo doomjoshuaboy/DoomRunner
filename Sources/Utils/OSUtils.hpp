@@ -26,10 +26,16 @@ namespace os {
 //  standard directories and installation properties
 
 /// Returns home directory for the current user.
+/** Note: If this launcher is running in a sandbox environment such as Flatpak, this may point to a directory inside that sandbox. */
 QString getHomeDir();
 
 /// Returns directory for document files of the current user.
+/** Note: If this launcher is running in a sandbox environment such as Flatpak, this may point to a directory inside that sandbox. */
 QString getDocumentsDir();
+
+/// Returns directory for image files of the current user.
+/** Note: If this launcher is running in a sandbox environment such as Flatpak, this may point to a directory inside that sandbox. */
+QString getPicturesDir();
 
 #if IS_WINDOWS
 /// Returns directory for game saves of the current user.
@@ -37,21 +43,23 @@ QString getSavedGamesDir();
 #endif
 
 /// Returns parent directory where applications should store their config files.
+/** Note: If this launcher is running in a sandbox environment such as Flatpak, this may point to a directory inside that sandbox. */
 QString getAppConfigDir();
 
 /// Returns parent directory where applications should store their data files.
+/** Note: If this launcher is running in a sandbox environment such as Flatpak, this may point to a directory inside that sandbox. */
 QString getAppDataDir();
 
-/// Returns directory where selected application should store its config files.
+/// Returns directory where a selected application should store its config files.
 QString getConfigDirForApp( const QString & executablePath );
 
-/// Returns directory where selected application should store its data files.
+/// Returns directory where a selected application should store its data files.
 QString getDataDirForApp( const QString & executablePath );
 
-/// Returns directory where this application should save its config files.
+/// Returns directory where this application should store its config files.
 QString getThisAppConfigDir();
 
-/// Returns directory where this application should save its data files. This may be the same as the config dir.
+/// Returns directory where this application should store its data files. This may be the same as the config dir.
 QString getThisAppDataDir();
 
 
@@ -59,6 +67,7 @@ QString getThisAppDataDir();
 
 const QString & getCachedHomeDir();
 const QString & getCachedDocumentsDir();
+const QString & getCachedPicturesDir();
 #if IS_WINDOWS
 const QString & getCachedSavedGamesDir();
 #endif
@@ -72,8 +81,8 @@ const QString & getCachedThisAppDataDir();
 
 // other
 
-/// Returns whether an executable is inside one of directories where the system will find it.
-/** If true it means the executable can be started directly by using only its name without its path. */
+/// Returns whether an executable is inside one of the directories where the system will find it.
+/** True means the executable can be started directly by using only its name without its path. */
 bool isInSearchPath( const QString & filePath );
 
 
@@ -92,14 +101,15 @@ struct SandboxEnvInfo
 {
 	SandboxEnv type;   ///< sandbox environment type determined from path
 	QString appName;   ///< name which the sandbox uses to identify the application
+	QString appDir;    ///< sandbox directory reserved for this app to run in (by default the app only has permissions to access this dir)
 };
 SandboxEnvInfo getSandboxEnvInfo( const QString & executablePath );
 
 struct ShellCommand
 {
 	QString executable;
-	QStringVec arguments;
-	QStringVec extraPermissions;  ///< extra sandbox environment permissions needed to run this command
+	QStringVec arguments;  ///< all command line arguments, including options to grant the extra permissions below
+	QStringVec extraPermissions;  ///< extra sandbox environment permissions needed to run this command (for displaying only)
 };
 /// Returns a shell command needed to run a specified executable without parameters.
 /** The result may be different based on operating system and where the executable is installed.

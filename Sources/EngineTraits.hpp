@@ -126,6 +126,8 @@ class EngineTraits {
 	};
 	SaveBaseDir baseDirStyleForSaveFiles() const;
 
+	QString getDefaultScreenshotDir() const;
+
 	// generates either "-warp 2 5" or "+map E2M5" depending on the engine capabilities
 	QStringVec getMapArgs( int mapIdx, const QString & mapName ) const;
 

@@ -162,7 +162,7 @@ static QString suggestEngineConfigDir( const EngineInfo & engine )
 	QString dirOfExecutable = fs::getDirOfFile( engine.executablePath );
 	QString portableIniFilePath = fs::getPathFromFileName( dirOfExecutable, "gzdoom_portable.ini" );
 	if (assumeGZDoom49_orLater( engine ) && !fs::isValidFile( portableIniFilePath ))
-		return os::getDocumentsDir()%"/My Games/GZDoom";
+		return os::getCachedDocumentsDir()%"/My Games/GZDoom";
 	else
 		return dirOfExecutable;
 
@@ -170,11 +170,11 @@ static QString suggestEngineConfigDir( const EngineInfo & engine )
 
 	// On Linux they store them in standard user's app config dir (usually something like /home/youda/.config/).
 	if (engine.sandboxEnv.type == os::SandboxEnv::Snap)
-		return os::getHomeDir()%"/snap/"%engine.exeBaseName()%"/current/.config/"%engine.exeBaseName();
+		return os::getCachedHomeDir()%"/snap/"%engine.exeBaseName()%"/current/.config/"%engine.exeBaseName();
 	else if (engine.sandboxEnv.type == os::SandboxEnv::Flatpak)  // the engine is a Flatpak installation
-		return os::getHomeDir()%"/.var/app/"%engine.sandboxEnv.appName%"/.config/"%engine.exeBaseName();
+		return os::getCachedHomeDir()%"/.var/app/"%engine.sandboxEnv.appName%"/.config/"%engine.exeBaseName();
 	else
-		return os::getConfigDirForApp( engine.executablePath );  // -> /home/youda/.config/zdoom
+		return os::getCachedConfigDirForApp( engine.executablePath );  // -> /home/youda/.config/zdoom
 
  #endif
 }
@@ -186,7 +186,7 @@ static QString suggestEngineDataDir( const EngineInfo & engine )
 	QString dirOfExecutable = fs::getDirOfFile( engine.executablePath );
 	QString portableIniFilePath = fs::getPathFromFileName( dirOfExecutable, "gzdoom_portable.ini" );
 	if (assumeGZDoom49_orLater( engine ) && !fs::isValidFile( portableIniFilePath ))
-		return os::getSavedGamesDir()%"/GZDoom";
+		return os::getCachedSavedGamesDir()%"/GZDoom";
 	else
 		return dirOfExecutable;
 

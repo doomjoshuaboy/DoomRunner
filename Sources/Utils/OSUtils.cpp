@@ -41,6 +41,11 @@ QString getDocumentsDir()
 	return QStandardPaths::writableLocation( QStandardPaths::DocumentsLocation );
 }
 
+QString getPicturesDir()
+{
+	return QStandardPaths::writableLocation( QStandardPaths::PicturesLocation );
+}
+
 #if IS_WINDOWS
 QString getSavedGamesDir()
 {
@@ -61,28 +66,18 @@ QString getSavedGamesDir()
 
 QString getAppConfigDir()
 {
- #if !IS_WINDOWS && defined(FLATPAK_BUILD)  // the launcher is a Flatpak installation on Linux
-	// Inside Flatpak environment the GenericConfigLocation points into the Flatpak sandbox of this application.
-	// But we need the system-wide config dir, and that's not available via Qt, so we must do this guessing hack.
-	return getHomeDir()%"/.config";
- #else
 	return QStandardPaths::writableLocation( QStandardPaths::GenericConfigLocation );
- #endif
 }
 
 QString getAppDataDir()
 {
- #if !IS_WINDOWS && defined(FLATPAK_BUILD)  // the launcher is a Flatpak installation on Linux
-	// Inside Flatpak environment the GenericDataLocation points into the Flatpak sandbox of this application.
-	// But we need the system-wide data dir, and that's not available via Qt, so we must do this guessing hack.
-	return getHomeDir()%"/.local/share";
- #else
 	return QStandardPaths::writableLocation( QStandardPaths::GenericDataLocation );
- #endif
 }
 
 QString getConfigDirForApp( const QString & executablePath )
 {
+	// Note: If this is required to work for sandboxed applications or when this launcher is in a sandbox,
+	//       some more sophisticated logic needs to be implemented. But right now it doesn't seem needed.
 	QString genericConfigDir = getAppConfigDir();
 	QString appName = fs::getFileBasenameFromPath( executablePath );
 	return fs::getPathFromFileName( genericConfigDir, appName );  // -> /home/youda/.config/zdoom
@@ -90,6 +85,8 @@ QString getConfigDirForApp( const QString & executablePath )
 
 QString getDataDirForApp( const QString & executablePath )
 {
+	// Note: If this is required to work for sandboxed applications or when this launcher is in a sandbox,
+	//       some more sophisticated logic needs to be implemented. But right now it doesn't seem needed.
 	QString genericDataDir = getAppDataDir();
 	QString appName = fs::getFileBasenameFromPath( executablePath );
 	return fs::getPathFromFileName( genericDataDir, appName );  // -> /home/youda/.local/share/zdoom
@@ -142,6 +139,14 @@ const QString & getCachedDocumentsDir()
 	if (!g_documentsDir)
 		g_documentsDir = getDocumentsDir();
 	return *g_documentsDir;
+}
+
+static std::optional< QString > g_picturesDir;
+const QString & getCachedPicturesDir()
+{
+	if (!g_picturesDir)
+		g_picturesDir = getPicturesDir();
+	return *g_picturesDir;
 }
 
 #if IS_WINDOWS
@@ -217,12 +222,12 @@ QString getSandboxName( SandboxEnv sandbox )
 	{
 		case SandboxEnv::Snap:    return "Snap";
 		case SandboxEnv::Flatpak: return "Flatpak";
-		default:               return "<invalid>";
+		default:                  return "<invalid>";
 	}
 }
 
 static const QRegularExpression snapPathRegex("^/snap/");
-static const QRegularExpression flatpakPathRegex("^/var/lib/flatpak/app/([^/]+)/");
+static const QRegularExpression flatpakPathRegex("^(/var/lib/flatpak/app)/([^/]+)/");
 
 SandboxEnvInfo getSandboxEnvInfo( const QString & executablePath )
 {
@@ -233,11 +238,13 @@ SandboxEnvInfo getSandboxEnvInfo( const QString & executablePath )
 	{
 		sandboxEnv.type = SandboxEnv::Snap;
 		sandboxEnv.appName = fs::getFileBasenameFromPath( executablePath );
+		// TODO: permissions
 	}
 	else if ((match = flatpakPathRegex.match( executablePath )).hasMatch())
 	{
 		sandboxEnv.type = SandboxEnv::Flatpak;
-		sandboxEnv.appName = match.captured(1);
+		sandboxEnv.appName = match.captured(2);
+		sandboxEnv.appDir = match.captured(1)%'/'%sandboxEnv.appName;
 	}
 	else
 	{
@@ -264,10 +271,10 @@ inline static QString fixExePath( QString exePath )
 ShellCommand getRunCommand(
 	const QString & executablePath, const PathRebaser & currentDirToNewWorkingDir, const QStringVec & dirsToBeAccessed
 ){
-	ShellCommand cmd;
-	QStringVec cmdParts;
+	QStringVec cmdParts, extraPermissions;
 
 	SandboxEnvInfo sandboxEnv = getSandboxEnvInfo( executablePath );
+	QDir sandboxAppDir( sandboxEnv.appDir );
 
 	// different installations require different ways to launch the program executable
  #ifdef FLATPAK_BUILD
@@ -275,8 +282,8 @@ ShellCommand getRunCommand(
 	{
 		// We are inside a Flatpak package but launching an app inside the same Flatpak package,
 		// no special command or permissions needed.
-		cmd.executable = fs::getFileNameFromPath( executablePath );
-		return cmd;  // this is all we need, skip the rest
+		QString exeFileName = fs::getFileNameFromPath( executablePath );
+		return { .executable = exeFileName };  // this is all we need, skip the rest
 	}
 	else
 	{
@@ -299,9 +306,12 @@ ShellCommand getRunCommand(
 		cmdParts << "run";
 		for (const QString & dir : dirsToBeAccessed)
 		{
-			QString fileSystemPermission = "--filesystem=" + fs::getAbsolutePath( dir );
-			cmdParts << currentDirToNewWorkingDir.maybeQuoted( fileSystemPermission );
-			cmd.extraPermissions << std::move(fileSystemPermission);
+			if (fs::isInsideDir( dir, sandboxAppDir ))
+			{
+				QString fileSystemPermission = "--filesystem=" + currentDirToNewWorkingDir.maybeQuoted( dir );
+				cmdParts << fileSystemPermission;  // add it to the command
+				extraPermissions << std::move( fileSystemPermission );  // add it to a list to be shown to the user
+			}
 		}
 		cmdParts << sandboxEnv.appName;
 	}
@@ -317,8 +327,10 @@ ShellCommand getRunCommand(
 		cmdParts << currentDirToNewWorkingDir.maybeQuoted( rebasedExePath );
 	}
 
+	ShellCommand cmd;
 	cmd.executable = cmdParts.takeFirst();
 	cmd.arguments = std::move( cmdParts );
+	cmd.extraPermissions = std::move( extraPermissions );
 	return cmd;
 }
 

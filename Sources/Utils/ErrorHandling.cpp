@@ -9,7 +9,7 @@
 
 #include "WidgetUtils.hpp"  // HYPERLINK
 //#include "StandardOutput.hpp"
-#include "OSUtils.hpp"          // getThisAppDataDir
+#include "OSUtils.hpp"          // getCachedThisAppDataDir
 #include "FileSystemUtils.hpp"  // getPathFromFileName
 
 #include <QStringBuilder>

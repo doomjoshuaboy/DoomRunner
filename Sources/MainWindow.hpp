@@ -271,11 +271,13 @@ class MainWindow : public QMainWindow, private DialogWithPaths {
 
 	QStringList getUniqueMapNamesFromWADs( const QVector<QString> & selectedWADs ) const;
 
-	QString getConfigDir() const;
-	QString getDataDir() const;
-	QString getSaveDir() const;
-	QString getScreenshotDir() const;
-	QString getDemoDir() const;
+	QString getEngineConfigDir() const;
+	QString getEngineDataDir() const;
+	QString getEngineSaveDir() const;
+	QString getEngineScreenshotDir() const;
+	QString getActiveSaveDir() const;
+	QString getActiveScreenshotDir() const;
+	QString getActiveDemoDir() const;
 
 	QString convertRebasedEngineDataPath( QString path ) const;
 	QString rebaseSaveFilePath( const QString & filePath, const PathRebaser & workingDirRebaser, const EngineInfo * engine );

@@ -9,6 +9,7 @@
 
 #include "Utils/ContainerUtils.hpp"   // find
 #include "Utils/FileSystemUtils.hpp"  // getFileBasenameFromPath
+#include "Utils/OSUtils.hpp"          // getCachedPicturesDir
 
 #include <QHash>
 #include <QRegularExpression>
@@ -191,11 +192,20 @@ EngineTraits::SaveBaseDir EngineTraits::baseDirStyleForSaveFiles() const
 {
 	assert( hasAppInfo() );
 
-	// if we can't read the exe info, assume the latest GZDoom
+	// if we can't read the exe info, assume the latest GZDoom, TODO: unify with EngineDialog
 	if (!_exeVersionInfo.version.isValid() || (_appNameNormalized == "gzdoom" && _exeVersionInfo.version >= Version(4,9,0)))
 		return SaveBaseDir::SaveDir;
 	else
 		return SaveBaseDir::WorkingDir;
+}
+
+QString EngineTraits::getDefaultScreenshotDir() const
+{
+	// if we can't read the exe info, assume the latest GZDoom, TODO: unify with EngineDialog
+	if (!_exeVersionInfo.version.isValid() || (_appNameNormalized == "gzdoom" && _exeVersionInfo.version >= Version(4,9,0)))
+		return os::getCachedPicturesDir();  // TODO: if sandboxed, must be dir inside the sandbox
+	else
+		return fs::getDirOfFile( _exePath );
 }
 
 static const QRegularExpression doom1MapNameRegex("E(\\d+)M(\\d+)");

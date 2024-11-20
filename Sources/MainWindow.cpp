@@ -149,42 +149,59 @@ QStringList MainWindow::getUniqueMapNamesFromWADs( const QVector<QString> & sele
 	return uniqueMapNames.keys();
 }
 
-QString MainWindow::getConfigDir() const
+// returns config dir configured for the current engine, or empty string if engine is not selected
+QString MainWindow::getEngineConfigDir() const
 {
 	int currentEngineIdx = ui->engineCmbBox->currentIndex();
 	return currentEngineIdx >= 0 ? engineModel[ currentEngineIdx ].configDir : QString();
 }
 
-QString MainWindow::getDataDir() const
+// returns data dir configured for the current engine, or empty string if engine is not selected
+QString MainWindow::getEngineDataDir() const
 {
 	int currentEngineIdx = ui->engineCmbBox->currentIndex();
 	return currentEngineIdx >= 0 ? engineModel[ currentEngineIdx ].dataDir : QString();
 }
 
-QString MainWindow::getSaveDir() const
+// returns default save dir of the current engine, or empty string if engine is not selected
+QString MainWindow::getEngineSaveDir() const
+{
+	return getEngineDataDir();
+}
+
+// returns default screenshot dir of the current engine, or empty string if engine is not selected
+QString MainWindow::getEngineScreenshotDir() const
+{
+	int currentEngineIdx = ui->engineCmbBox->currentIndex();
+	return currentEngineIdx >= 0 ? engineModel[ currentEngineIdx ].getDefaultScreenshotDir() : QString();
+}
+
+// returns the directory the engine will use for save files under the current launcher options
+QString MainWindow::getActiveSaveDir() const
 {
 	// the path in saveDirLine is relative to the engine's data dir by convention, need to rebase it to the current working dir
 	QString saveDirLine = ui->saveDirLine->text();
 	if (!saveDirLine.isEmpty())                                     // if custom save dir is specified
 		return engineDataDirRebaser.rebasePathBack( saveDirLine );  // then use it
 	else                                                            // otherwise
-		return getDataDir();                                        // use engine's data dir
+		return getEngineSaveDir();                                  // use engine's default save dir
 }
 
-QString MainWindow::getScreenshotDir() const
+// returns the directory where the engine will save screenshots under the current launcher options
+QString MainWindow::getActiveScreenshotDir() const
 {
 	// the path in screenshotDirLine is relative to the engine's data dir by convention, need to rebase it to the current working dir
 	QString screenshotDirLine = ui->screenshotDirLine->text();
 	if (!screenshotDirLine.isEmpty())                                     // if custom save dir is specified
 		return engineDataDirRebaser.rebasePathBack( screenshotDirLine );  // then use it
 	else                                                                  // otherwise
-		return getDataDir();                                              // use engine's data dir
+		return getEngineScreenshotDir();                                  // use engine's default screenshot dir
 }
 
-QString MainWindow::getDemoDir() const
+QString MainWindow::getActiveDemoDir() const
 {
 	// let's not complicate things and treat save dir and demo dir as one
-	return getSaveDir();
+	return getActiveSaveDir();
 }
 
 // converts a path relative to the engine's data dir to absolute path or vice versa
@@ -215,7 +232,7 @@ QString MainWindow::rebaseSaveFilePath( const QString & filePath, const PathReba
 	// the base dir for the save file parameter depends on the engine and its version
 	if (engine && engine->baseDirStyleForSaveFiles() == EngineTraits::SaveBaseDir::SaveDir)
 	{
-		QString saveDir = getSaveDir();
+		QString saveDir = getActiveSaveDir();
 		PathRebaser saveDirRebaser( pathConvertor.workingDir(), saveDir, PathStyle::Relative, workingDirRebaser.quotePaths() );
 		return saveDirRebaser.rebaseAndQuotePath( filePath );
 	}
@@ -250,11 +267,19 @@ void MainWindow::forEachDirToBeAccessed( const Functor & loopBody ) const
 		return;
 	}
 
-	// dir of config files
-	if (const ConfigFile * selectedConfig = getSelectedConfig())
+	// dir of engine config files
+	// Will be accessed even if no config file is explicitly selected, because the default one will be used.
+	if (!selectedEngine->configDir.isEmpty())
 	{
-		loopBody( selectedEngine->configDir );  // cannot be empty otherwise config would not be selected
+		loopBody( selectedEngine->configDir );
 	}
+
+	// dir of engine data files
+	// No need to add it on its own, it is only used to determine save/screenshot/demo dirs, which will be added later.
+	/*if (!selectedEngine->dataDir.isEmpty())
+	{
+		loopBody( selectedEngine->dataDir );
+	}*/
 
 	// dir of IWAD
 	if (const IWAD * selectedIWAD = getSelectedIWAD())
@@ -276,46 +301,51 @@ void MainWindow::forEachDirToBeAccessed( const Functor & loopBody ) const
 		if (!mod.checked)
 			continue;
 
-		if (fs::isInsideDir( mod.path, modDir ))  // aggregate all mods inside the configured mod dir under single dir path
+		if (fs::isInsideDir( mod.path, modDir ))
 		{
-			if (!modDirUsed)  // use it only once
+			// Aggregate all mods inside the configured mod dir under single dir path.
+			if (!modDirUsed)
 			{
 				loopBody( modSettings.dir );
-				modDirUsed = true;
+				modDirUsed = true;  // use it only once
 			}
 		}
-		else  // but still add directories outside of the configured mod dir, because mod dir is only a hint
+		else
 		{
+			// But still add directories outside of the configured mod dir, because mod dir is only a hint.
 			loopBody( fs::getDirOfFile( mod.path ) );
 		}
 	}
 
-	// dir of saves and demo files
+
+	// dir of saves files
+	// Add it in every case, because in all modes the save file either needs to be read or written to.
+	loopBody( getActiveSaveDir() );
+
+	// dir of demo files
 	LaunchMode launchMode = getLaunchModeFromUI();
-	if ((launchMode == LoadSave && !ui->saveFileCmbBox->currentText().isEmpty())
-	 || (launchMode == ReplayDemo && !ui->demoFileCmbBox_replay->currentText().isEmpty()))
+	if (launchMode == RecordDemo || launchMode == ReplayDemo)
 	{
-		loopBody( getSaveDir() );
+		loopBody( getActiveDemoDir() );
 	}
 
 	// dir of screenshots
-	if (!ui->screenshotDirLine->text().isEmpty())
-	{
-		loopBody( ui->screenshotDirLine->text() );
-	}
+	// Add it in every case, because the user may want to save a screenshot anytime.
+	loopBody( getActiveScreenshotDir() );
 }
 
-// Gets (deduplicated) directories which the engine will need to access (either for reading or writing).
+// Gets directories (unique absolute paths) which the engine will need to access (either for reading or writing).
 QStringVec MainWindow::getDirsToBeAccessed() const
 {
-	QSet< QString > dirSet;  // de-duplicate the paths
+	QSet< QString > normDirPaths;  // de-duplicate the paths
 
 	forEachDirToBeAccessed( [&]( const QString & dir )
 	{
-		dirSet.insert( dir );
+		// insert the paths in a normalized form to deduplicate equivalent paths written in a different way
+		normDirPaths.insert( fs::getNormalizedPath( dir ) );
 	});
 
-	return QStringVec( dirSet.begin(), dirSet.end() );
+	return QStringVec( normDirPaths.begin(), normDirPaths.end() );
 }
 
 // This needs to be called everytime the user make a change that needs to be saved into the options file.
@@ -2022,7 +2052,7 @@ void MainWindow::cloneConfig()
 		return;
 	}
 
-	QString configDirStr = getConfigDir();  // config dir cannot be empty, otherwise currentConfigFileName would be empty
+	QString configDirStr = getEngineConfigDir();  // config dir cannot be empty, otherwise selectedConfig would be null
 	QDir configDir( configDirStr );
 	QFileInfo oldConfig( configDir.filePath( selectedConfig->fileName ) );
 
@@ -3358,7 +3388,7 @@ void MainWindow::onScreenshotDirChanged( const QString & rebasedDir )
 
 void MainWindow::browseSaveDir()
 {
-	QString currentSaveDir = getSaveDir();
+	QString currentSaveDir = getActiveSaveDir();
 
 	QString newSaveDir = DialogWithPaths::browseDir( this, "with saves", currentSaveDir );
 	if (newSaveDir.isEmpty())  // user probably clicked cancel
@@ -3371,7 +3401,7 @@ void MainWindow::browseSaveDir()
 
 void MainWindow::browseScreenshotDir()
 {
-	QString currentScreenshotDir = getScreenshotDir();
+	QString currentScreenshotDir = getActiveScreenshotDir();
 
 	QString newScreenshotDir = DialogWithPaths::browseDir( this, "for screenshots", currentScreenshotDir );
 	if (newScreenshotDir.isEmpty())  // user probably clicked cancel
@@ -3740,12 +3770,13 @@ void MainWindow::resetMapDirModelAndView()
 
 void MainWindow::updateConfigFilesFromDir( const QString * callersConfigDir )
 {
-	QString configDir = callersConfigDir ? *callersConfigDir : getConfigDir();
+	QString configDir = callersConfigDir ? *callersConfigDir /*optimization*/ : getEngineConfigDir();
 
 	// workaround (read the big comment above)
 	int origConfigIdx = ui->configCmbBox->currentIndex();
 	disableSelectionCallbacks = true;
 
+	// if the configDir is empty (not set), it will clear the combo box, which is exactly what we want
 	wdg::updateComboBoxFromDir( configModel, ui->configCmbBox, configDir, /*recursively*/false, /*emptyItem*/true, pathConvertor,
 		/*isDesiredFile*/[]( const QFileInfo & file ) { return doom::configFileSuffixes.contains( file.suffix().toLower() ); }
 	);
@@ -3762,7 +3793,7 @@ void MainWindow::updateConfigFilesFromDir( const QString * callersConfigDir )
 
 void MainWindow::updateSaveFilesFromDir( const QString * callersSaveDir )
 {
-	QString saveDir = callersSaveDir ? *callersSaveDir : getSaveDir();
+	QString saveDir = callersSaveDir ? *callersSaveDir : getActiveSaveDir();
 
 	// workaround (read the big comment above)
 	int origSaveIdx = ui->saveFileCmbBox->currentIndex();
@@ -3784,7 +3815,7 @@ void MainWindow::updateSaveFilesFromDir( const QString * callersSaveDir )
 
 void MainWindow::updateDemoFilesFromDir( const QString * callersDemoDir )
 {
-	QString demoDir = callersDemoDir ? *callersDemoDir : getDemoDir();
+	QString demoDir = callersDemoDir ? *callersDemoDir : getActiveDemoDir();
 
 	// workaround (read the big comment above)
 	int origDemoIdx = ui->demoFileCmbBox_replay->currentIndex();
@@ -4208,13 +4239,13 @@ os::ShellCommand MainWindow::generateLaunchCommand(
 
 	if (!ui->saveDirLine->text().isEmpty())
 	{
-		QString saveDirPath = getSaveDir();
+		QString saveDirPath = getActiveSaveDir();
 		p.checkNotAFile( saveDirPath, "the save dir", {} );
 		cmd.arguments << engine.saveDirParam() << engineDirRebaser.rebaseAndQuotePath( saveDirPath );
 	}
 	if (!ui->screenshotDirLine->text().isEmpty())
 	{
-		QString screenshotDirPath = getScreenshotDir();
+		QString screenshotDirPath = getActiveScreenshotDir();
 		p.checkNotAFile( screenshotDirPath, "the screenshot dir", {} );
 		cmd.arguments << "+screenshot_dir" << engineDirRebaser.rebaseAndQuotePath( screenshotDirPath );
 	}
@@ -4230,21 +4261,21 @@ os::ShellCommand MainWindow::generateLaunchCommand(
 	}
 	else if (launchMode == LoadSave && !ui->saveFileCmbBox->currentText().isEmpty())
 	{
-		QString saveDir = getSaveDir();  // save dir cannot be empty, otherwise the saveFileCmbBox would be empty
+		QString saveDir = getActiveSaveDir();  // save dir cannot be empty, otherwise the saveFileCmbBox would be empty
 		QString trueSavePath = fs::getPathFromFileName( saveDir, ui->saveFileCmbBox->currentText() );
 		p.checkFilePath( trueSavePath, "the selected save file", "Please select another one." );
 		cmd.arguments << "-loadgame" << rebaseSaveFilePath( trueSavePath, engineDirRebaser, &engine );
 	}
 	else if (launchMode == RecordDemo && !ui->demoFileLine_record->text().isEmpty())
 	{
-		QString demoDir = getDemoDir();  // if demo dir is empty (saveDirLine is empty and engine.configDir is not set), then
+		QString demoDir = getActiveDemoDir();  // if demo dir is empty (saveDirLine is empty and engine.configDir is not set), then
 		QString demoPath = fs::getPathFromFileName( demoDir, ui->demoFileLine_record->text() );  // the demoFileLine will be used as is
 		cmd.arguments << "-record" << engineDirRebaser.rebaseAndQuotePath( demoPath );
 		cmd.arguments << engine.getMapArgs( ui->mapCmbBox_demo->currentIndex(), ui->mapCmbBox_demo->currentText() );
 	}
 	else if (launchMode == ReplayDemo && !ui->demoFileCmbBox_replay->currentText().isEmpty())
 	{
-		QString demoDir = getDemoDir();  // demo dir cannot be empty, otherwise the demoFileCmbBox_replay would be empty
+		QString demoDir = getActiveDemoDir();  // demo dir cannot be empty, otherwise the demoFileCmbBox_replay would be empty
 		QString demoPath = fs::getPathFromFileName( demoDir, ui->demoFileCmbBox_replay->currentText() );
 		p.checkFilePath( demoPath, "the selected demo", "Please select another one." );
 		cmd.arguments << "-playdemo" << engineDirRebaser.rebaseAndQuotePath( demoPath );
@@ -4451,7 +4482,7 @@ void MainWindow::launch()
 	}
 
 	// Make sure the alternative save dir exists, because engine will not create it if demo file path points there.
-	QString saveDirPath = getSaveDir();
+	QString saveDirPath = getActiveSaveDir();
 	bool saveDirExists = fs::createDirIfDoesntExist( saveDirPath );
 	if (!saveDirExists)
 	{
