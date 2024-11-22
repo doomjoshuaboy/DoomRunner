@@ -8,7 +8,6 @@
 #include "EngineDialog.hpp"
 #include "ui_EngineDialog.h"
 
-#include "Utils/OSUtils.hpp"  // standard paths
 #include "Utils/MiscUtils.hpp"  // highlightInvalidPath
 #include "Utils/ErrorHandling.hpp"
 
@@ -116,94 +115,15 @@ void EngineDialog::onWindowShown()
 
 static void loadDerivedEngineInfo( EngineInfo & engine, const QString & executablePath )
 {
-	engine.initSandboxEnvInfo( executablePath );  // find out whether the engine is installed in a sandbox environment
 	engine.loadAppInfo( executablePath );  // read executable version info and infer application name
 }
 
-#if IS_WINDOWS
-static bool assumeGZDoom49_orLater( const EngineInfo & engine )
+static void suggestUserEngineInfo( Engine & userEngineInfo, const EngineTraits & autoEngineInfo )
 {
-	// If we have version info from the executable file, decide based on the application name and version,
-	// otherwise if the executable file name seems like GZDoom, assume the latest version.
-	if (!engine.exeAppName().isEmpty() && engine.exeVersion().isValid())
-		return engine.exeAppName() == "GZDoom" && engine.exeVersion() >= Version(4,9,0);
-	else
-		return engine.exeBaseName() == "gzdoom";
-}
-#endif
-
-static QString suggestEngineName( const EngineInfo & engine )
-{
- #if IS_WINDOWS
-
-	// On Windows we can use the metadata built into the executable, or the name of its directory.
-	if (!engine.exeAppName().isEmpty())
-		return engine.exeAppName();  // exe metadata should be most reliable source
-	else
-		return fs::getDirnameOfFile( engine.executablePath );
-
- #else
-
-	// On Linux we have to fallback to the binary name (or use the Flatpak name if there is one).
-	if (engine.sandboxEnv.type != os::SandboxEnv::None)
-		return engine.sandboxEnv.appName;
-	else
-		return engine.exeBaseName();
-
- #endif
-}
-
-static QString suggestEngineConfigDir( const EngineInfo & engine )
-{
- #if IS_WINDOWS
-
-	// On Windows, engines usually store their config in the directory of its binaries,
-	// with the exception of latest GZDoom (thanks Graph) that started storing it to Documents\My Games\GZDoom
-	QString dirOfExecutable = fs::getDirOfFile( engine.executablePath );
-	QString portableIniFilePath = fs::getPathFromFileName( dirOfExecutable, "gzdoom_portable.ini" );
-	if (assumeGZDoom49_orLater( engine ) && !fs::isValidFile( portableIniFilePath ))
-		return os::getCachedDocumentsDir()%"/My Games/GZDoom";
-	else
-		return dirOfExecutable;
-
- #else
-
-	// On Linux they store them in standard user's app config dir (usually something like /home/youda/.config/).
-	if (engine.sandboxEnv.type == os::SandboxEnv::Snap)
-		return os::getCachedHomeDir()%"/snap/"%engine.exeBaseName()%"/current/.config/"%engine.exeBaseName();
-	else if (engine.sandboxEnv.type == os::SandboxEnv::Flatpak)  // the engine is a Flatpak installation
-		return os::getCachedHomeDir()%"/.var/app/"%engine.sandboxEnv.appName%"/.config/"%engine.exeBaseName();
-	else
-		return os::getCachedConfigDirForApp( engine.executablePath );  // -> /home/youda/.config/zdoom
-
- #endif
-}
-
-static QString suggestEngineDataDir( const EngineInfo & engine )
-{
- #if IS_WINDOWS
-
-	QString dirOfExecutable = fs::getDirOfFile( engine.executablePath );
-	QString portableIniFilePath = fs::getPathFromFileName( dirOfExecutable, "gzdoom_portable.ini" );
-	if (assumeGZDoom49_orLater( engine ) && !fs::isValidFile( portableIniFilePath ))
-		return os::getCachedSavedGamesDir()%"/GZDoom";
-	else
-		return dirOfExecutable;
-
- #else
-
-	// On Linux it is generally the same as config dir.
-	return suggestEngineConfigDir( engine );
-
- #endif
-}
-
-static void suggestUserEngineInfo( EngineInfo & engine )
-{
-	engine.name = suggestEngineName( engine );
-	engine.configDir = suggestEngineConfigDir( engine );
-	engine.dataDir = suggestEngineDataDir( engine );
-	engine.family = guessEngineFamily( engine.exeBaseName() );
+	userEngineInfo.name      = autoEngineInfo.displayName();
+	userEngineInfo.configDir = autoEngineInfo.getDefaultConfigDir();
+	userEngineInfo.dataDir   = autoEngineInfo.getDefaultSaveDir();
+	userEngineInfo.family    = autoEngineInfo.guessEngineFamily();
 }
 
 EngineInfo EngineDialog::autofillEngineInfo( const QString & executablePath, const PathConvertor & pathConvertor )
@@ -215,11 +135,14 @@ EngineInfo EngineDialog::autofillEngineInfo( const QString & executablePath, con
 	loadDerivedEngineInfo( engine, executablePath );
 
 	// automatically suggest the most common user-defined paths and options based on the derived engine info
-	suggestUserEngineInfo( engine );
+	suggestUserEngineInfo( engine, engine );
 	// keep the suggested paths in the original form, some may be better stored as relative, some as absolute
 
 	// assign automatic info that depends on the user-defined info
 	engine.assignFamilyTraits( engine.family );
+
+	assert( engine.hasAppInfo() );
+	assert( engine.hasFamilyTraits() );
 
 	return engine;
 }
@@ -379,6 +302,9 @@ void EngineDialog::accept()
 	}
 	engine.family = EngineFamily( familyIdx );
 	engine.assignFamilyTraits( engine.family );
+
+	assert( engine.hasAppInfo() );
+	assert( engine.hasFamilyTraits() );
 
 	// accept the user's confirmation
 	superClass::accept();

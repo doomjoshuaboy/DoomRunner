@@ -149,8 +149,13 @@ CONFIG(debug, debug|release) {
 
 win32 {
 	DEFINES += IS_WINDOWS=true
+	DEFINES += IS_MACOS=false
+} else: macx {
+	DEFINES += IS_WINDOWS=false
+	DEFINES += IS_MACOS=true
 } else {
 	DEFINES += IS_WINDOWS=false
+	DEFINES += IS_MACOS=false
 }
 
 

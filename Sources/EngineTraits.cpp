@@ -118,6 +118,9 @@ static const QStringList noCompatLevels = {};
 //======================================================================================================================
 //  code
 
+//----------------------------------------------------------------------------------------------------------------------
+//  compat levels
+
 const QStringList & getCompatLevels( CompatLevelStyle style )
 {
 	if (style == CompatLevelStyle::ZDoom)
@@ -148,37 +151,23 @@ EngineFamily familyFromStr( const QString & familyStr )
 		return EngineFamily::_EnumEnd;
 }
 
-EngineFamily guessEngineFamily( const QString & executableBaseName )
+EngineFamily EngineTraits::guessEngineFamily() const
 {
-	auto iter = knownEngineFamilies.find( executableBaseName.toLower() );
+	assert( hasAppInfo() );
+
+	auto iter = knownEngineFamilies.find( normalizedName() );
 	if (iter != knownEngineFamilies.end())
 		return iter.value();
 	else
 		return EngineFamily::ZDoom;
 }
 
-//----------------------------------------------------------------------------------------------------------------------
+
+//======================================================================================================================
 //  EngineTraits
 
-const Version EngineTraits::emptyVersion;
-
-EngineTraits::EngineTraits()
-{
-	_familyTraits = nullptr;
-}
-
-void EngineTraits::loadAppInfo( const QString & executablePath )
-{
-	_exePath = executablePath;
-	_exeBaseName = fs::getFileBasenameFromPath( executablePath );
-
-	// Sometimes opening an executable file takes incredibly long (even > 1 second) for unknown reason (antivirus maybe?).
-	// So we cache the results here so that at least the subsequent calls are fast.
-	if (fs::isValidFile( executablePath ))
-		_exeVersionInfo = os::g_cachedExeInfo.getFileInfo( executablePath );
-
-	_appNameNormalized = (!_exeVersionInfo.appName.isEmpty() ? _exeVersionInfo.appName : _exeBaseName).toLower();
-}
+//----------------------------------------------------------------------------------------------------------------------
+//  initialization
 
 void EngineTraits::assignFamilyTraits( EngineFamily family )
 {
@@ -188,25 +177,139 @@ void EngineTraits::assignFamilyTraits( EngineFamily family )
 		_familyTraits = &engineFamilyTraits[ 0 ];  // use ZDoom traits as fallback
 }
 
+//----------------------------------------------------------------------------------------------------------------------
+//  default directories and path requirements
+
+// The following default directories were observed when using GZDoom 4.9 and later.
+// Why do you have to make everything so complicated Graph?!
+/*
+Windows - system-wide
+  ini config:   E:\Youda\Documents\My Games\GZDoom\
+  saves 4.10:   E:\Youda\Saved Games\GZDoom\doom.id.doom2.commercial\
+  saves 4.11:   E:\Youda\Saved Games\GZDoom\savegames\doom.id.doom2.commercial\
+  screenshots:  E:\Youda\Pictures\Screenshots\GZDoom\
+
+Linux - system-wide
+  ini config:   /home/youda/.config/gzdoom/
+  saves 4.10:   /home/youda/.config/gzdoom/doom.id.doom2.commercial/
+  saves 4.11:   /home/youda/.config/gzdoom/savegames/doom.id.doom2.commercial/
+  screenshots:  /home/youda/.config/gzdoom/screenshots/
+
+Linux - Flatpak
+  sandbox home: /home/youda/.var/app/org.zdoom.GZDoom/
+  ini config:   /home/youda/.var/app/org.zdoom.GZDoom/.config/gzdoom/
+  saves 4.10:   /home/youda/.var/app/org.zdoom.GZDoom/.config/gzdoom/doom.id.doom2.commercial/
+  saves 4.11:   /home/youda/.var/app/org.zdoom.GZDoom/.config/gzdoom/savegames/doom.id.doom2.commercial/
+  screenshots:  /home/youda/.var/app/org.zdoom.GZDoom/.config/gzdoom/screenshots/
+
+Linux - Snap
+  sandbox home: /home/youda/snap/gzdoom/current/
+  ini config:   /home/youda/snap/gzdoom/current/.config/gzdoom/
+  saves 4.10:   /home/youda/snap/gzdoom/current/.config/gzdoom/doom.id.doom2.commercial/
+  saves 4.11:   /home/youda/snap/gzdoom/current/.config/gzdoom/savegames/doom.id.doom2.commercial/
+  screenshots:  /home/youda/snap/gzdoom/current/.config/gzdoom/screenshots/
+
+Mac - system-wide
+  ini config:   ~/Library/Preferences/gzdoom/
+  saves 4.10:   ~/Library/Preferences/gzdoom/?
+  saves 4.11:   ~/Library/Preferences/gzdoom/savegames?/
+  screenshots:  ~/Library/Preferences/gzdoom/screenshots?/
+*/
+
+bool EngineTraits::isGZDoomVersionOrLater( Version atLeastVersion ) const
+{
+	// If we have version info from the executable file, decide based on the application name and version,
+	// otherwise if the executable file name seems like GZDoom, assume the latest version.
+	if (!exeAppName().isEmpty() && exeVersion().isValid())
+		return exeAppName() == "GZDoom" && exeVersion() >= atLeastVersion;
+	else
+		return normalizedName() == "gzdoom";
+}
+
+QString EngineTraits::getDefaultConfigDir() const
+{
+	assert( hasAppInfo() );
+
+ #if IS_WINDOWS
+
+	// On Windows, engines usually store their config in the directory of its binaries,
+	// with the exception of latest GZDoom (thanks Graph) that started storing it to Documents\My Games\GZDoom
+	QString dirOfExecutable = fs::getParentDir( exePath() );
+	QString portableIniFilePath = fs::getPathFromEntryName( dirOfExecutable, "gzdoom_portable.ini" );
+	if (isGZDoomVersionOrLater({4,9,0}) && !fs::isValidFile( portableIniFilePath ))
+		return os::getDocumentsDir()%"/My Games/GZDoom";
+	else
+		return dirOfExecutable;
+
+ #else
+
+	// On Linux they store them in standard user's app config dir (usually something like /home/youda/.config/).
+	return os::getConfigDirForApp( exePath() );
+
+ #endif
+}
+
+QString EngineTraits::getDefaultDataDir() const
+{
+	assert( hasAppInfo() );
+
+ #if IS_WINDOWS
+
+	// On Windows, engines usually store their data (saves, screenshots) in the directory of its binaries,
+	// with the exception of latest GZDoom (thanks Graph) that started storing it to Saved Games\GZDoom
+	QString dirOfExecutable = fs::getParentDir( exePath() );
+	QString portableIniFilePath = fs::getPathFromEntryName( dirOfExecutable, "gzdoom_portable.ini" );
+	if (isGZDoomVersionOrLater({4,9,0}) && !fs::isValidFile( portableIniFilePath ))
+		return os::getSavedGamesDir()%"/GZDoom";
+	else
+		return dirOfExecutable;
+
+ #else
+
+	// On Linux they generally store them in the config dir.
+	return getDefaultConfigDir();
+
+ #endif
+}
+
+QString EngineTraits::getDefaultSaveDir() const
+{
+	assert( hasAppInfo() );
+
+	QString saveDir = getDefaultDataDir();
+	if (isGZDoomVersionOrLater({4,11,0}))  // since GZDoom 4.11.0, the save files are stored in a subdirectory
+		saveDir += "/savegames";
+	return saveDir;
+}
+
+QString EngineTraits::getDefaultScreenshotDir() const
+{
+	assert( hasAppInfo() );
+
+ #if IS_WINDOWS
+	QString dirOfExecutable = fs::getParentDir( exePath() );
+	QString portableIniFilePath = fs::getPathFromEntryName( dirOfExecutable, "gzdoom_portable.ini" );
+	if (isGZDoomVersionOrLater({4,9,0}) && !fs::isValidFile( portableIniFilePath ))
+		return os::getPicturesDir()%"/Screenshots/GZDoom";
+	else
+		return dirOfExecutable;
+ #else
+	return getDefaultDataDir() + "/screenshots";
+ #endif
+}
+
 EngineTraits::SaveBaseDir EngineTraits::baseDirStyleForSaveFiles() const
 {
 	assert( hasAppInfo() );
 
-	// if we can't read the exe info, assume the latest GZDoom, TODO: unify with EngineDialog
-	if (!_exeVersionInfo.version.isValid() || (_appNameNormalized == "gzdoom" && _exeVersionInfo.version >= Version(4,9,0)))
+	if (isGZDoomVersionOrLater({4,9,0}))
 		return SaveBaseDir::SaveDir;
 	else
 		return SaveBaseDir::WorkingDir;
 }
 
-QString EngineTraits::getDefaultScreenshotDir() const
-{
-	// if we can't read the exe info, assume the latest GZDoom, TODO: unify with EngineDialog
-	if (!_exeVersionInfo.version.isValid() || (_appNameNormalized == "gzdoom" && _exeVersionInfo.version >= Version(4,9,0)))
-		return os::getCachedPicturesDir();  // TODO: if sandboxed, must be dir inside the sandbox
-	else
-		return fs::getDirOfFile( _exePath );
-}
+//----------------------------------------------------------------------------------------------------------------------
+//  command line parameters deduction
 
 static const QRegularExpression doom1MapNameRegex("E(\\d+)M(\\d+)");
 static const QRegularExpression doom2MapNameRegex("MAP(\\d+)");
@@ -248,7 +351,7 @@ QStringVec EngineTraits::getCompatLevelArgs( int compatLevel ) const
 
 	// Properly working -compatmode is present only in GZDoom,
 	// for other ZDoom-based engines use at least something, even if it doesn't fully work.
-	if (_exeBaseName == "gzdoom" || _exeBaseName == "vkdoom")
+	if (exeBaseName() == "gzdoom" || exeBaseName() == "vkdoom")
 		return { "-compatmode", QString::number( compatLevel ) };
 	else if (_familyTraits->compLvlStyle == CompatLevelStyle::ZDoom)
 		return { "+compatmode", QString::number( compatLevel ) };
@@ -263,8 +366,7 @@ QString EngineTraits::getCmdMonitorIndex( int ownIndex ) const
 	assert( hasAppInfo() && hasFamilyTraits() );
 
 	int startingMonitorIndex = 0;
-	auto iter = startingMonitorIndexes.find( _exeBaseName );
-	if (iter != startingMonitorIndexes.end())
+	if (auto iter = startingMonitorIndexes.find( exeBaseName() ); iter != startingMonitorIndexes.end())
 		startingMonitorIndex = iter.value();
 
 	return QString::number( startingMonitorIndex + ownIndex );

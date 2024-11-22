@@ -369,20 +369,9 @@ struct AppearanceSettings
 // Inheritance is used instead of composition, so that we can write engine.exeAppName() instead of engine.traits.exeAppName().
 struct EngineInfo : public Engine, public EngineTraits
 {
-	os::SandboxEnvInfo sandboxEnv;
-
 	using Engine::Engine;
 	EngineInfo( const Engine & engine ) { static_cast< Engine & >( *this ) = engine; }
 	EngineInfo( Engine && engine )      { static_cast< Engine & >( *this ) = std::move( engine ); }
-
-	void initSandboxEnvInfo( const QString & executablePath_ )
-	{
-		sandboxEnv = os::getSandboxEnvInfo( executablePath_ );
-	}
-	bool hasSandboxEnvInfo() const
-	{
-		return !sandboxEnv.appName.isNull();
-	}
 };
 
 

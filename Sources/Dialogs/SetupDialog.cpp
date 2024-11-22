@@ -323,7 +323,7 @@ void SetupDialog::onEnginesDropped( int row, int count, DnDType type )
 	for (int engineIdx = row; engineIdx < row + count; ++engineIdx)
 	{
 		EngineInfo & engine = engineModel[ engineIdx ];
-		if (!engine.hasAppInfo() || !engine.hasSandboxEnvInfo() || !engine.hasFamilyTraits())
+		if (!engine.hasAppInfo() || !engine.hasFamilyTraits())
 		{
 			engine = EngineDialog::autofillEngineInfo( engine.executablePath, pathConvertor );
 		}

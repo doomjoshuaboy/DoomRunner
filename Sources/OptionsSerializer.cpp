@@ -82,11 +82,9 @@ static void deserialize( const JsonObjectCtx & jsEngine, Engine & engine )
 	{
 		engine.name = jsEngine.getString( "name", "<missing name>" );
 		engine.executablePath = jsEngine.getString( "path", {} );  // empty path is used to indicate invalid entry to be skipped
-		engine.configDir = jsEngine.getString( "config_dir", fs::getDirOfFile( engine.executablePath ) );
+		engine.configDir = jsEngine.getString( "config_dir", fs::getParentDir( engine.executablePath ) );
 		engine.dataDir = jsEngine.getString( "data_dir", engine.configDir );
 		engine.family = familyFromStr( jsEngine.getString( "family", {} ) );
-		if (engine.family == EngineFamily::_EnumEnd)
-			engine.family = guessEngineFamily( fs::getFileBasenameFromPath( engine.executablePath ) );
 	}
 }
 

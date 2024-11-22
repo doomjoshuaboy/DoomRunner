@@ -190,7 +190,7 @@ ProcessStatus ProcessOutputWindow::runProcess(
 ){
 	logDebug() << "ProcessOutputWindow::runProcess: " << executable;
 
-	executableName = fs::getFileNameFromPath( executable );
+	executableName = fs::getEntryNameFromPath( executable );
 	this->setWindowTitle( executableName % " output" );
 
 	process.setProgram( executable );

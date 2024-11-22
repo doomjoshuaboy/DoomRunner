@@ -36,7 +36,7 @@ bool isDirectoryWritable( const QString & dirPath )
 {
 	// Qt does not offer any reliable way to determine if we can write a file into a directory.
 	// This is the only working workaround.
-	return tryToWriteFile( getPathFromFileName( dirPath, "write_test.txt" ) );
+	return tryToWriteFile( getPathFromEntryName( dirPath, "write_test.txt" ) );
 }
 
 QString sanitizePath( const QString & path )

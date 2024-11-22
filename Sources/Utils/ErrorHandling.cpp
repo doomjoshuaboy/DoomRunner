@@ -79,7 +79,7 @@ static const char * const logFileName = "errors.txt";
 const QString & getCachedErrorFilePath()
 {
 	// local static variables are initialized under a mutex, so it should be save to use from multiple threads.
-	static const QString logFilePath = fs::getPathFromFileName( os::getCachedThisAppDataDir(), logFileName );
+	static const QString logFilePath = fs::getPathFromEntryName( os::getThisLauncherDataDir(), logFileName );
 	return logFilePath;
 }
 

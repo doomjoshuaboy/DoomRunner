@@ -61,19 +61,19 @@ inline PathStyle getPathStyle( const QString & path )
 	return isAbsolutePath( path ) ? PathStyle::Absolute : PathStyle::Relative;
 }
 
-inline bool exists( const QString & path )
+inline bool exists( const QString & entryPath )
 {
-	return QFileInfo::exists( path );
+	return QFileInfo::exists( entryPath );
 }
 
-inline bool isDirectory( const QString & path )
+inline bool isDirectory( const QString & entryPath )
 {
-	return QFileInfo( path ).isDir();
+	return QFileInfo( entryPath ).isDir();
 }
 
-inline bool isFile( const QString & path )
+inline bool isFile( const QString & entryPath )
 {
-	return QFileInfo( path ).isFile();
+	return QFileInfo( entryPath ).isFile();
 }
 
 inline bool isValidDir( const QString & dirPath )
@@ -96,9 +96,9 @@ inline bool isInvalidFile( const QString & filePath )
 	return !filePath.isEmpty() && !QFileInfo( filePath ).isFile();  // it exists but it's not a file
 }
 
-inline bool isValidEntry( const QString & path )
+inline bool isValidEntry( const QString & entryPath )
 {
-	return !path.isEmpty() && QFileInfo::exists( path );
+	return !entryPath.isEmpty() && QFileInfo::exists( entryPath );
 }
 
 inline QString getAbsolutePath( const QString & path )
@@ -112,20 +112,20 @@ inline QString getNormalizedPath( const QString & path )
 	return QFileInfo( path ).canonicalFilePath();
 }
 
-inline QString getPathFromFileName( const QString & dirPath, const QString & fileName )
+inline QString getPathFromEntryName( const QString & dirPath, const QString & entryName )
 {
-	return !dirPath.isEmpty() ? QDir( dirPath ).filePath( fileName ) : fileName;
+	return !dirPath.isEmpty() ? QDir( dirPath ).filePath( entryName ) : entryName;
 }
 
-inline QString getAbsolutePathFromFileName( const QString & dirPath, const QString & fileName )
+inline QString getAbsolutePathFromEntryName( const QString & dirPath, const QString & entryName )
 {
 	// gets rid of any redundant "/./" or "/../" in the middle of dirPath
-	return QDir( dirPath ).absoluteFilePath( fileName );
+	return QDir( dirPath ).absoluteFilePath( entryName );
 }
 
-inline QString getFileNameFromPath( const QString & filePath )
+inline QString getEntryNameFromPath( const QString & entryPath )
 {
-	return QFileInfo( filePath ).fileName();
+	return QFileInfo( entryPath ).fileName();
 }
 
 inline QString getFileBasenameFromPath( const QString & filePath )
@@ -133,19 +133,19 @@ inline QString getFileBasenameFromPath( const QString & filePath )
 	return QFileInfo( filePath ).baseName();
 }
 
-inline QString getDirOfFile( const QString & filePath )
+inline QString getParentDir( const QString & entryPath )
 {
-	return QFileInfo( filePath ).path();
+	return QFileInfo( entryPath ).path();
 }
 
-inline QString getAbsoluteDirOfFile( const QString & filePath )
+inline QString getAbsoluteParentDir( const QString & entryPath )
 {
-	return QFileInfo( filePath ).absolutePath();
+	return QFileInfo( entryPath ).absolutePath();
 }
 
-inline QString getDirnameOfFile( const QString & filePath )
+inline QString getParentDirName( const QString & entryPath )
 {
-	return QFileInfo( filePath ).dir().dirName();
+	return QFileInfo( entryPath ).dir().dirName();
 }
 
 inline QString replaceFileSuffix( const QString & filePath, const QString & newSuffix )
